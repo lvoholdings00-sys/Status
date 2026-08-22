@@ -288,9 +288,10 @@ let _highlightedPin = null;
 let _U = null;
 let _systemStatus = {};
 
-/* Divisions this panel can take offline. Each name must match the
-   "division" value dashboards report to /system-status. */
-const DIVISIONS_CONTROL = ['Vindex', 'Alliance', 'Operations', 'Communications', 'Infrastructure'];
+/* Divisions this panel can take offline — must exactly match VALID_DIVISIONS
+   in worker.js ("Alliance", "Vindex", "Ops"), since normalizeDivision()
+   on the backend rejects anything else. */
+const DIVISIONS_CONTROL = ['Alliance', 'Vindex', 'Ops'];
 
 const PIN_COLORS = [
   { name:'Gold',    hex:'#b8953f' },
