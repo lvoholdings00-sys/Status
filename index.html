@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LVO Status — Global Operations</title>
+<link rel="icon" type="image/png" href="assets/logo.png">
 
 <script
   async crossorigin="anonymous"
@@ -48,7 +49,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 /* AUTH GUARD */
 #auth-guard{position:fixed;inset:0;background:var(--black);display:flex;align-items:center;justify-content:center;z-index:9000;flex-direction:column;gap:16px}
 #auth-guard-text{font-size:9px;letter-spacing:.3em;color:var(--text-muted);text-transform:uppercase}
-.auth-logo{font-family:'Cormorant Garamond',serif;font-size:40px;font-weight:300;letter-spacing:.35em;color:var(--gold);margin-bottom:4px}
+.auth-logo{height:40px;width:auto;margin-bottom:4px;object-fit:contain}
 
 #app{display:none;height:100vh;overflow:hidden;flex-direction:column}
 #app.visible{display:flex;animation:fadeIn .6s ease}
@@ -57,7 +58,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 /* TOP BAR */
 .top-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 32px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;z-index:100}
 .top-bar-left{display:flex;align-items:center;gap:20px}
-.top-logo{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:300;letter-spacing:.3em;color:var(--gold);line-height:1}
+.top-logo{height:24px;width:auto;object-fit:contain;display:block}
 .top-nav{display:flex;gap:0}
 .top-nav-item{font-size:9px;letter-spacing:.2em;color:var(--text-muted);text-transform:uppercase;padding:6px 14px;cursor:pointer;border-bottom:1px solid transparent;transition:all .2s}
 .top-nav-item:hover{color:var(--text-dim)}
@@ -186,7 +187,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
 <!-- Auth Guard -->
 <div id="auth-guard">
-  <div class="auth-logo">LVO</div>
+  <img class="auth-logo" src="assets/logo.png" alt="LVO">
   <div id="auth-guard-text">Verifying access…</div>
 </div>
 
@@ -196,7 +197,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
   <!-- Top Bar -->
   <div class="top-bar">
     <div class="top-bar-left">
-      <div class="top-logo">LVO</div>
+      <img class="top-logo" src="assets/logo.png" alt="LVO">
       <nav class="top-nav">
         <div class="top-nav-item" onclick="window.location.href='https://dash.lvo-cloud.cloud'">Command</div>
         <div class="top-nav-item active">Status</div>
