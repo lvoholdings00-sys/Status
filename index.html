@@ -6,13 +6,6 @@
 <title>LVO Status — Global Operations</title>
 <link rel="icon" type="image/png" href="assets/logo.png">
 
-<script
-  async crossorigin="anonymous"
-  data-clerk-publishable-key="pk_live_Y2xlcmsubHZvLWNsb3VkLmNsb3VkJA"
-  src="https://clerk.lvo-cloud.cloud/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
-  type="text/javascript"
-></script>
-
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 
 <!-- Three.js for the globe -->
@@ -67,6 +60,8 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .clock{font-size:10px;color:var(--text-muted);letter-spacing:.12em}
 .auth-status{display:flex;align-items:center;gap:7px;font-size:9px;letter-spacing:.16em;color:var(--text-muted);text-transform:uppercase}
 .auth-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;box-shadow:0 0 6px #2d6a4a}
+.top-signout{background:none;border:1px solid var(--border);color:var(--text-muted);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.16em;padding:6px 12px;cursor:pointer;text-transform:uppercase;transition:all .2s}
+.top-signout:hover{border-color:var(--gold);color:var(--gold)}
 
 /* MAIN LAYOUT */
 .main-layout{flex:1;display:grid;grid-template-columns:1fr 340px;overflow:hidden}
@@ -86,7 +81,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .panel-title{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:400;letter-spacing:.04em;color:var(--text);margin-bottom:2px}
 .panel-sub{font-size:8px;letter-spacing:.2em;color:var(--text-muted);text-transform:uppercase}
 
-.panel-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.panel-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
 .ptab{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--text-muted);padding:10px 18px;cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;margin-bottom:-1px}
 .ptab:hover{color:var(--text-dim)}
 .ptab.active{color:var(--gold);border-bottom-color:var(--gold)}
@@ -151,6 +146,24 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .presence-bar-wrap{width:60px;height:2px;background:var(--border);margin-left:10px}
 .presence-bar{height:100%;background:var(--gold);transition:width .4s}
 
+/* SYSTEM CONTROL PANEL */
+.ctrl-wrap{padding:18px 22px}
+.ctrl-intro{font-size:10px;color:var(--text-dim);line-height:1.7;margin-bottom:16px;letter-spacing:.02em}
+.ctrl-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.ctrl-actions .btn-danger{background:transparent;border:1px solid var(--red-light);color:var(--red-light)}
+.ctrl-actions .btn-danger:hover{background:var(--red-light);color:var(--text)}
+.ctrl-list{display:flex;flex-direction:column;gap:10px}
+.ctrl-row{background:var(--card);border:1px solid var(--border);padding:14px}
+.ctrl-row.is-down{border-color:rgba(192,57,43,.45)}
+.ctrl-row-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px;flex-wrap:wrap}
+.ctrl-name{font-size:13px;letter-spacing:.06em;color:var(--text)}
+.ctrl-pill{font-size:8px;letter-spacing:.16em;text-transform:uppercase;padding:4px 9px;flex-shrink:0}
+.ctrl-pill.up{color:var(--green);border:1px solid rgba(45,106,74,.5)}
+.ctrl-pill.down{color:var(--red-light);border:1px solid rgba(192,57,43,.5)}
+.ctrl-msg{margin-bottom:10px}
+.ctrl-row-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ctrl-updated{font-size:8px;color:var(--text-muted);letter-spacing:.1em;margin-top:8px}
+
 /* TOAST */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border-gold);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;padding:12px 20px;z-index:9001;animation:toastIn .3s ease;white-space:nowrap}
 @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
@@ -174,13 +187,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .modal-close{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:17px;padding:0;line-height:1;transition:color .2s}
 .modal-close:hover{color:var(--text)}
 .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
-
-/* Clerk overrides */
-.cl-avatarBox{border-radius:0!important;border:1px solid var(--border-gold)!important}
-.cl-userButtonPopoverCard{background:var(--surface)!important;border:1px solid var(--border-gold)!important;border-radius:0!important}
-.cl-userButtonPopoverActionButton{border-radius:0!important;color:var(--text-dim)!important}
-.cl-userButtonPopoverActionButton:hover{background:var(--gold-glow)!important;color:var(--gold)!important}
-.cl-userButtonPopoverActionButtonText{font-family:'DM Mono',monospace!important;font-size:11px!important}
 </style>
 </head>
 <body>
@@ -209,7 +215,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <span class="auth-dot"></span>
         <span id="user-name">Authenticated</span>
       </div>
-      <div id="clerk-user-btn"></div>
+      <button class="top-signout" id="sign-out-btn" type="button">Sign Out</button>
     </div>
   </div>
 
@@ -242,6 +248,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div class="ptab active" onclick="switchPanel('pins',this)">Pins</div>
         <div class="ptab" onclick="switchPanel('add',this)">Add Pin</div>
         <div class="ptab" onclick="switchPanel('status',this)">Status</div>
+        <div class="ptab" onclick="switchPanel('control',this)">Control</div>
       </div>
       <div class="panel-body" id="panel-body">
         <!-- populated by switchPanel() -->
@@ -266,21 +273,24 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
   </div>
 </div>
 
+<script src="assets/auth-client.js"></script>
 <script>
 /* ═══════════════════════════════════════════════════
    STATE
 ═══════════════════════════════════════════════════ */
 const LOGIN_URL = 'https://login.lvo-cloud.cloud/';
 const STORAGE_KEY = 'lvo_status_pins_v2';
-const CLERK_APPEARANCE = {
-  variables:{colorBackground:'#0a0a0a',colorText:'#e8e6e0',colorPrimary:'#b8953f',colorInputBackground:'#161616',colorInputText:'#e8e6e0',borderRadius:'0px',fontFamily:"'DM Mono',monospace",fontSize:'13px'},
-  elements:{avatarBox:{borderRadius:'0',border:'1px solid #b8953f44'},userButtonPopoverCard:{background:'#111111',border:'1px solid #b8953f44',borderRadius:'0'}}
-};
 
 let _pins = [];
 let _editId = null;
 let _activePanel = 'pins';
 let _highlightedPin = null;
+let _U = null;
+let _systemStatus = {};
+
+/* Divisions this panel can take offline. Each name must match the
+   "division" value dashboards report to /system-status. */
+const DIVISIONS_CONTROL = ['Vindex', 'Alliance', 'Operations', 'Communications', 'Infrastructure'];
 
 const PIN_COLORS = [
   { name:'Gold',    hex:'#b8953f' },
@@ -304,6 +314,17 @@ function savePins() {
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
 /* ═══════════════════════════════════════════════════
+   WORKER FETCH — same pattern as the division dashboards.
+   Session token is attached automatically by LVOAuth._request;
+   admin checks happen server-side, not on anything sent from here.
+═══════════════════════════════════════════════════ */
+function workerFetch(path, opts = {}) {
+  return LVOAuth._request(path, opts)
+    .then(data => ({ ok: true, json: async () => data }))
+    .catch(e => ({ ok: false, status: e.status || 500, json: async () => e.data || { error: e.message }, text: async () => e.message }));
+}
+
+/* ═══════════════════════════════════════════════════
    CLOCK
 ═══════════════════════════════════════════════════ */
 function tickClock() {
@@ -317,7 +338,6 @@ setInterval(tickClock,1000); tickClock();
 /* ═══════════════════════════════════════════════════
    GLOBE (Three.js)
 ═══════════════════════════════════════════════════ */
-let globe = null;
 let globeScene, globeCamera, globeRenderer, globeSphere, globeAtmo;
 let globePinMeshes = [];
 let globeAnimFrame;
@@ -521,8 +541,6 @@ function renderPins() {
 }
 
 // Pulse animation injected into animate loop
-let _lastPulse = 0;
-const _origAnimate = animateGlobe;
 function animateGlobeWithPulse() {
   globeAnimFrame = requestAnimationFrame(animateGlobeWithPulse);
   if (autoRotate && !isDragging) sphereGroup.rotation.y += 0.001;
@@ -618,6 +636,9 @@ function switchPanel(name, el) {
     selectColor(PIN_COLORS[0].hex, document.querySelector('.color-swatch'));
   } else if (name === 'status') {
     body.innerHTML = renderStatusHTML();
+  } else if (name === 'control') {
+    body.innerHTML = renderControlHTML();
+    fetchSystemStatus();
   }
 }
 
@@ -725,6 +746,102 @@ function renderStatusHTML() {
         </div>
       </div>`).join('') : `<div style="font-size:10px;color:var(--text-muted);padding-top:10px">No pins yet</div>`}
   </div>`;
+}
+
+/* ═══════════════════════════════════════════════════
+   SYSTEM CONTROL — take any division dashboard offline
+   Backend contract (see WORKER):
+     GET  /system-status                          → { [division]: { down, message, updatedAt } }
+     PUT  /system-status/:division   {down,message} → updates that division (admin-only, server-enforced)
+═══════════════════════════════════════════════════ */
+function renderControlHTML() {
+  return `<div class="ctrl-wrap">
+    <div class="ctrl-intro">Taking a system offline immediately shows a "Systems Down" notice on that division's dashboard for everyone, admins included. Changes apply the moment they're saved.</div>
+    <div class="ctrl-actions">
+      <button class="btn btn-outline btn-sm" onclick="fetchSystemStatus()">↺ Refresh</button>
+      <button class="btn btn-danger btn-sm" onclick="killAll()">⚠ Take All Offline</button>
+      <button class="btn btn-outline btn-sm" onclick="restoreAll()">Restore All</button>
+    </div>
+    <div id="ctrl-list" class="ctrl-list"><div class="pin-empty">Loading…</div></div>
+  </div>`;
+}
+
+async function fetchSystemStatus() {
+  const el = document.getElementById('ctrl-list');
+  try {
+    const res = await workerFetch('/system-status');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _systemStatus = await res.json();
+  } catch (e) {
+    console.error('system-status fetch failed', e);
+    if (el) el.innerHTML = `<div class="pin-empty" style="color:var(--red-light)">Failed to load system status</div>`;
+    return;
+  }
+  renderControlList();
+}
+
+function renderControlList() {
+  const el = document.getElementById('ctrl-list');
+  if (!el) return;
+  el.innerHTML = DIVISIONS_CONTROL.map(name => {
+    const s = _systemStatus[name] || { down: false, message: '' };
+    const safeMsg = (s.message || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    return `<div class="ctrl-row ${s.down ? 'is-down' : ''}">
+      <div class="ctrl-row-top">
+        <div class="ctrl-name">${name}</div>
+        <div class="ctrl-pill ${s.down ? 'down' : 'up'}">${s.down ? '● Offline' : '● Online'}</div>
+      </div>
+      <input class="form-input ctrl-msg" id="ctrl-msg-${name}" placeholder="Message shown on the down page (optional)…" value="${safeMsg}">
+      <div class="ctrl-row-actions">
+        <button class="btn btn-sm ${s.down ? 'btn-outline' : 'btn-danger'}" onclick="toggleSystem('${name}', ${!s.down})">${s.down ? 'Bring Online' : 'Take Offline'}</button>
+        <button class="btn btn-outline btn-sm" onclick="saveSystemMessage('${name}')">Save Message</button>
+      </div>
+      ${s.updatedAt ? `<div class="ctrl-updated">Last changed ${new Date(s.updatedAt).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'})}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+async function toggleSystem(name, down) {
+  const msgEl = document.getElementById('ctrl-msg-' + name);
+  const message = msgEl ? msgEl.value.trim() : ((_systemStatus[name] && _systemStatus[name].message) || '');
+  try {
+    const res = await workerFetch(`/system-status/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ down, message })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _systemStatus[name] = { down, message, updatedAt: new Date().toISOString() };
+    renderControlList();
+    showToast(`${name} marked ${down ? 'OFFLINE' : 'online'}`);
+  } catch (e) {
+    showToast(`Failed to update ${name}`);
+  }
+}
+
+async function saveSystemMessage(name) {
+  const s = _systemStatus[name] || { down: false, message: '' };
+  const msgEl = document.getElementById('ctrl-msg-' + name);
+  const message = msgEl ? msgEl.value.trim() : '';
+  try {
+    const res = await workerFetch(`/system-status/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ down: s.down, message })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _systemStatus[name] = { down: s.down, message, updatedAt: new Date().toISOString() };
+    showToast(`Message saved for ${name}`);
+  } catch (e) {
+    showToast('Failed to save message');
+  }
+}
+
+async function killAll() {
+  if (!confirm('Take ALL systems offline? Every division dashboard will show Systems Down.')) return;
+  for (const name of DIVISIONS_CONTROL) await toggleSystem(name, true);
+}
+async function restoreAll() {
+  if (!confirm('Bring ALL systems back online?')) return;
+  for (const name of DIVISIONS_CONTROL) await toggleSystem(name, false);
 }
 
 /* ═══════════════════════════════════════════════════
@@ -898,26 +1015,48 @@ function showToast(msg) {
 }
 
 /* ═══════════════════════════════════════════════════
-   CLERK AUTH
+   AUTH — worker session, same as the division dashboards.
+   This page requires an admin-role account: anyone signed in
+   but not an admin is bounced, same as a signed-out visitor.
 ═══════════════════════════════════════════════════ */
 window.addEventListener('load', async () => {
-  try { await Clerk.load(); } catch(e) {
-    document.getElementById('auth-guard-text').textContent='Auth error — redirecting…';
-    setTimeout(()=>window.location.href=LOGIN_URL,1500); return;
+  const token = LVOAuth.getToken();
+  if (!token) {
+    document.getElementById('auth-guard-text').textContent = 'Redirecting…';
+    setTimeout(() => window.location.href = LOGIN_URL, 400);
+    return;
   }
-  if (!Clerk.user) { window.location.href=LOGIN_URL; return; }
 
-  const user = Clerk.user;
+  document.getElementById('auth-guard-text').textContent = 'Authenticating…';
+  let user = null;
+  try { user = await LVOAuth.session(); } catch (e) { user = null; }
+
+  if (!user) {
+    document.getElementById('auth-guard-text').textContent = 'Session expired. Redirecting…';
+    LVOAuth.clearToken();
+    setTimeout(() => window.location.href = LOGIN_URL, 800);
+    return;
+  }
+
+  if (user.role !== 'admin') {
+    document.getElementById('auth-guard-text').textContent = 'Restricted — administrator access only. Redirecting…';
+    setTimeout(() => window.location.href = LOGIN_URL, 1200);
+    return;
+  }
+
+  _U = user;
   const displayName = user.firstName
-    ? user.firstName + (user.lastName ? ' ' + user.lastName[0]+'.' : '')
-    : (user.primaryEmailAddress?.emailAddress||'User');
+    ? user.firstName + (user.lastName ? ' ' + user.lastName[0] + '.' : '')
+    : (user.email || 'Admin');
 
   document.getElementById('user-name').textContent = displayName;
   document.getElementById('auth-guard').style.display = 'none';
   document.getElementById('app').classList.add('visible');
 
-  Clerk.mountUserButton(document.getElementById('clerk-user-btn'), { appearance: CLERK_APPEARANCE });
-  Clerk.addListener(({ user }) => { if (!user) window.location.href=LOGIN_URL; });
+  document.getElementById('sign-out-btn').addEventListener('click', async () => {
+    await LVOAuth.logout();
+    window.location.href = LOGIN_URL;
+  });
 
   // Init
   loadPins();
