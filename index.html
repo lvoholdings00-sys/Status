@@ -248,6 +248,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div class="ptab active" onclick="switchPanel('pins',this)">Pins</div>
         <div class="ptab" onclick="switchPanel('add',this)">Add Pin</div>
         <div class="ptab" onclick="switchPanel('status',this)">Status</div>
+        <div class="ptab" onclick="switchPanel('incidents',this)">Incidents</div>
         <div class="ptab" onclick="switchPanel('control',this)">Control</div>
       </div>
       <div class="panel-body" id="panel-body">
@@ -280,6 +281,8 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 ═══════════════════════════════════════════════════ */
 const LOGIN_URL = 'https://login.lvo-cloud.cloud/'; // Clerk-based, retired — not used by the boot script below
 const STORAGE_KEY = 'lvo_status_pins_v2';
+const INCIDENTS_KEY = 'lvo_status_incidents_v1';
+const OPERATOR_KEY = 'lvo_status_operator_name';
 
 let _pins = [];
 let _editId = null;
@@ -287,6 +290,7 @@ let _activePanel = 'pins';
 let _highlightedPin = null;
 let _U = null;
 let _systemStatus = {};
+let _incidents = [];
 
 /* Divisions this panel can take offline — must exactly match VALID_DIVISIONS
    in worker.js ("Alliance", "Vindex", "Ops"), since normalizeDivision()
@@ -313,6 +317,98 @@ function savePins() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(_pins));
 }
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+/* ═══════════════════════════════════════════════════
+   INCIDENT LOG — local audit trail of every online/offline
+   toggle and status-message change. Kept in localStorage
+   alongside pins, same persistence model as the rest of
+   this page. Feeds the "Incidents" tab and the uptime %
+   badges shown in Status/Control.
+═══════════════════════════════════════════════════ */
+function loadIncidents() {
+  try { _incidents = JSON.parse(localStorage.getItem(INCIDENTS_KEY) || '[]'); } catch(e) { _incidents = []; }
+}
+function saveIncidents() {
+  localStorage.setItem(INCIDENTS_KEY, JSON.stringify(_incidents));
+}
+function logIncident(division, type, message) {
+  _incidents.unshift({
+    id: genId(),
+    division,
+    type,          // 'down' | 'up' | 'message'
+    message: message || '',
+    timestamp: new Date().toISOString(),
+    user: getOperatorName()
+  });
+  saveIncidents();
+}
+
+function getOperatorName() {
+  return localStorage.getItem(OPERATOR_KEY) || 'Unknown';
+}
+function setOperatorName() {
+  const current = localStorage.getItem(OPERATOR_KEY) || '';
+  const n = prompt('Your name (recorded in the audit log for changes you make):', current);
+  if (n !== null && n.trim()) {
+    localStorage.setItem(OPERATOR_KEY, n.trim());
+    showToast('Operator name set — ' + n.trim());
+  }
+}
+
+/* Rolling uptime % for a division over the last `days` days, derived
+   from down/up events in the incident log. Any division with no
+   logged incidents in the window reads as 100% (nothing recorded
+   as having gone down). */
+function computeUptime(division, days) {
+  days = days || 30;
+  const now = Date.now();
+  const windowStart = now - days * 24 * 60 * 60 * 1000;
+  const events = _incidents
+    .filter(i => i.division === division && (i.type === 'down' || i.type === 'up'))
+    .slice()
+    .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+  let downMs = 0;
+  let curDownStart = null;
+  events.forEach(e => {
+    const t = Math.max(new Date(e.timestamp).getTime(), windowStart);
+    if (e.type === 'down') {
+      if (curDownStart === null) curDownStart = t;
+    } else if (e.type === 'up') {
+      if (curDownStart !== null) { downMs += t - curDownStart; curDownStart = null; }
+    }
+  });
+  if (curDownStart !== null) downMs += now - curDownStart;
+
+  const totalMs = now - windowStart;
+  if (totalMs <= 0) return 100;
+  return Math.max(0, Math.min(100, 100 * (1 - downMs / totalMs)));
+}
+
+/* ═══════════════════════════════════════════════════
+   CSV EXPORT
+═══════════════════════════════════════════════════ */
+function downloadCSV(rows, filename) {
+  const csv = rows.map(r => r.map(c => `"${String(c == null ? '' : c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function exportPinsCSV() {
+  const rows = [['Label','Latitude','Longitude','Division','Color','Notes']];
+  _pins.forEach(p => rows.push([p.label, p.lat, p.lng, p.division||'', p.color||'', p.notes||'']));
+  downloadCSV(rows, 'lvo-pins-export.csv');
+  showToast('Pins exported');
+}
+function exportIncidentsCSV() {
+  const rows = [['Division','Type','Message','Timestamp','Operator']];
+  _incidents.forEach(i => rows.push([i.division, i.type, i.message||'', i.timestamp, i.user||'']));
+  downloadCSV(rows, 'lvo-incident-log.csv');
+  showToast('Incident log exported');
+}
 
 /* ═══════════════════════════════════════════════════
    WORKER FETCH — same pattern as the division dashboards.
@@ -644,6 +740,8 @@ function switchPanel(name, el) {
     selectColor(PIN_COLORS[0].hex, document.querySelector('.color-swatch'));
   } else if (name === 'status') {
     body.innerHTML = renderStatusHTML();
+  } else if (name === 'incidents') {
+    body.innerHTML = renderIncidentsHTML();
   } else if (name === 'control') {
     body.innerHTML = renderControlHTML();
     fetchSystemStatus();
@@ -651,7 +749,10 @@ function switchPanel(name, el) {
 }
 
 function renderPinListHTML() {
-  return `<div class="pin-list" id="pin-list">${renderPinItemsHTML()}</div>`;
+  return `<div style="padding:14px 22px 0">
+      <input class="form-input" id="pin-search" placeholder="Filter by label or division…" oninput="renderPinList()">
+    </div>
+    <div class="pin-list" id="pin-list">${renderPinItemsHTML()}</div>`;
 }
 
 function renderPinList() {
@@ -660,8 +761,13 @@ function renderPinList() {
 }
 
 function renderPinItemsHTML() {
+  const q = (document.getElementById('pin-search')?.value || '').trim().toLowerCase();
+  const filtered = q
+    ? _pins.filter(p => (p.label||'').toLowerCase().includes(q) || (p.division||'').toLowerCase().includes(q))
+    : _pins;
   if (!_pins.length) return `<div class="pin-empty">No pins yet — add one</div>`;
-  return _pins.map(pin => {
+  if (!filtered.length) return `<div class="pin-empty">No pins match "${q}"</div>`;
+  return filtered.map(pin => {
     const highlighted = pin.id === _highlightedPin;
     const imgEl = pin.imageUrl
       ? `<img class="pin-avatar" src="${pin.imageUrl}" style="border-color:${pin.color}" onerror="this.style.display='none'">`
@@ -736,7 +842,10 @@ function renderStatusHTML() {
   const sortedDivs = Object.entries(byDiv).sort((a,b)=>b[1]-a[1]);
   const maxCount = sortedDivs[0]?.[1] || 1;
 
-  return `<div class="status-grid">
+  return `<div style="padding:14px 22px 0;display:flex;justify-content:flex-end">
+    <button class="btn btn-outline btn-sm" onclick="exportPinsCSV()">⬇ Export Pins CSV</button>
+  </div>
+  <div class="status-grid">
     <div class="stat-card"><div class="stat-label">Total Pins</div><div class="stat-value">${total}</div><div class="stat-sub gold">Active</div></div>
     <div class="stat-card"><div class="stat-label">Divisions</div><div class="stat-value">${Object.keys(byDiv).length}</div><div class="stat-sub">Represented</div></div>
     <div class="stat-card"><div class="stat-label">Last Updated</div><div class="stat-value" style="font-size:16px">${total ? new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—'}</div></div>
@@ -753,7 +862,71 @@ function renderStatusHTML() {
           <div class="presence-count">${n}</div>
         </div>
       </div>`).join('') : `<div style="font-size:10px;color:var(--text-muted);padding-top:10px">No pins yet</div>`}
+  </div>
+  <div class="divider"></div>
+  <div class="presence-list">
+    <div style="font-size:8px;letter-spacing:.24em;color:var(--text-muted);text-transform:uppercase;margin-bottom:12px">System Uptime · Last 30 Days</div>
+    ${DIVISIONS_CONTROL.map(d => {
+      const pct = computeUptime(d, 30);
+      return `<div class="presence-item">
+        <div class="presence-name">${d}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="presence-bar-wrap"><div class="presence-bar" style="width:${pct.toFixed(1)}%;${pct < 99 ? 'background:var(--red-light)' : ''}"></div></div>
+          <div class="presence-count">${pct.toFixed(2)}%</div>
+        </div>
+      </div>`;
+    }).join('')}
   </div>`;
+}
+
+/* ═══════════════════════════════════════════════════
+   INCIDENTS TAB — local audit trail / timeline view
+═══════════════════════════════════════════════════ */
+function renderIncidentsHTML() {
+  const divOptions = ['All', ...DIVISIONS_CONTROL];
+  return `<div class="ctrl-wrap">
+    <div class="ctrl-intro">Automatic log of every online/offline toggle and status-message change made from the Control tab, kept on this device.</div>
+    <div class="ctrl-actions">
+      <select class="form-select" id="incident-filter" style="max-width:170px" onchange="renderIncidentList()">
+        ${divOptions.map(d => `<option value="${d}">${d}</option>`).join('')}
+      </select>
+      <button class="btn btn-outline btn-sm" onclick="exportIncidentsCSV()">⬇ Export CSV</button>
+      <button class="btn btn-danger btn-sm" onclick="clearIncidents()">Clear Log</button>
+    </div>
+    <div id="incident-list">${renderIncidentItemsHTML()}</div>
+  </div>`;
+}
+
+function renderIncidentList() {
+  const el = document.getElementById('incident-list');
+  if (el) el.innerHTML = renderIncidentItemsHTML();
+}
+
+function renderIncidentItemsHTML() {
+  const filter = document.getElementById('incident-filter')?.value || 'All';
+  const list = filter === 'All' ? _incidents : _incidents.filter(i => i.division === filter);
+  if (!list.length) return `<div class="pin-empty">No incidents logged yet</div>`;
+  return list.map(i => {
+    const color = i.type === 'down' ? 'var(--red-light)' : i.type === 'up' ? 'var(--green)' : 'var(--gold)';
+    const label = i.type === 'down' ? 'Taken Offline' : i.type === 'up' ? 'Restored Online' : 'Message Updated';
+    const safeMsg = (i.message || '').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    return `<div class="ctrl-row">
+      <div class="ctrl-row-top">
+        <div class="ctrl-name">${i.division}</div>
+        <div class="ctrl-pill" style="color:${color};border:1px solid ${color}">${label}</div>
+      </div>
+      ${safeMsg ? `<div style="font-size:10px;color:var(--text-dim);margin-bottom:8px">"${safeMsg}"</div>` : ''}
+      <div class="ctrl-updated">${new Date(i.timestamp).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'})} · ${i.user || 'Unknown'}</div>
+    </div>`;
+  }).join('');
+}
+
+function clearIncidents() {
+  if (!confirm('Clear the entire incident log? This cannot be undone.')) return;
+  _incidents = [];
+  saveIncidents();
+  renderIncidentList();
+  showToast('Incident log cleared');
 }
 
 /* ═══════════════════════════════════════════════════
@@ -769,6 +942,7 @@ function renderControlHTML() {
       <button class="btn btn-outline btn-sm" onclick="fetchSystemStatus()">↺ Refresh</button>
       <button class="btn btn-danger btn-sm" onclick="killAll()">⚠ Take All Offline</button>
       <button class="btn btn-outline btn-sm" onclick="restoreAll()">Restore All</button>
+      <button class="btn btn-outline btn-sm" onclick="setOperatorName()">👤 ${getOperatorName() === 'Unknown' ? 'Set Operator Name' : getOperatorName()}</button>
     </div>
     <div id="ctrl-list" class="ctrl-list"><div class="pin-empty">Loading…</div></div>
   </div>`;
@@ -794,17 +968,21 @@ function renderControlList() {
   el.innerHTML = DIVISIONS_CONTROL.map(name => {
     const s = _systemStatus[name] || { down: false, message: '' };
     const safeMsg = (s.message || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    const uptime = computeUptime(name, 30);
     return `<div class="ctrl-row ${s.down ? 'is-down' : ''}">
       <div class="ctrl-row-top">
         <div class="ctrl-name">${name}</div>
-        <div class="ctrl-pill ${s.down ? 'down' : 'up'}">${s.down ? '● Offline' : '● Online'}</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:8px;letter-spacing:.1em;color:var(--text-muted)">${uptime.toFixed(2)}% / 30d</span>
+          <div class="ctrl-pill ${s.down ? 'down' : 'up'}">${s.down ? '● Offline' : '● Online'}</div>
+        </div>
       </div>
       <input class="form-input ctrl-msg" id="ctrl-msg-${name}" placeholder="Message shown on the down page (optional)…" value="${safeMsg}">
       <div class="ctrl-row-actions">
         <button class="btn btn-sm ${s.down ? 'btn-outline' : 'btn-danger'}" onclick="toggleSystem('${name}', ${!s.down})">${s.down ? 'Bring Online' : 'Take Offline'}</button>
         <button class="btn btn-outline btn-sm" onclick="saveSystemMessage('${name}')">Save Message</button>
       </div>
-      ${s.updatedAt ? `<div class="ctrl-updated">Last changed ${new Date(s.updatedAt).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'})}</div>` : ''}
+      ${s.updatedAt ? `<div class="ctrl-updated">Last changed ${new Date(s.updatedAt).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'})}${s.user ? ' · ' + s.user : ''}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -818,7 +996,8 @@ async function toggleSystem(name, down) {
       body: JSON.stringify({ down, message })
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    _systemStatus[name] = { down, message, updatedAt: new Date().toISOString() };
+    _systemStatus[name] = { down, message, updatedAt: new Date().toISOString(), user: getOperatorName() };
+    logIncident(name, down ? 'down' : 'up', message);
     renderControlList();
     showToast(`${name} marked ${down ? 'OFFLINE' : 'online'}`);
   } catch (e) {
@@ -836,7 +1015,8 @@ async function saveSystemMessage(name) {
       body: JSON.stringify({ down: s.down, message })
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    _systemStatus[name] = { down: s.down, message, updatedAt: new Date().toISOString() };
+    _systemStatus[name] = { down: s.down, message, updatedAt: new Date().toISOString(), user: getOperatorName() };
+    logIncident(name, 'message', message);
     showToast(`Message saved for ${name}`);
   } catch (e) {
     showToast('Failed to save message');
@@ -1047,6 +1227,7 @@ window.addEventListener('load', () => {
   });
 
   loadPins();
+  loadIncidents();
   initGlobe();
 
   // Patch animate to include pulse
