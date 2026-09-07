@@ -191,8 +191,8 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 </head>
 <body>
 
-<!-- Auth Guard -->
-<div id="auth-guard">
+<!-- Auth Guard (currently unused — see boot script below) -->
+<div id="auth-guard" style="display:none">
   <img class="auth-logo" src="assets/logo.png" alt="LVO">
   <div id="auth-guard-text">Verifying access…</div>
 </div>
@@ -212,8 +212,8 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div class="top-right">
       <div class="clock" id="clock">--:-- --</div>
       <div class="auth-status">
-        <span class="auth-dot"></span>
-        <span id="user-name">Authenticated</span>
+        <span class="auth-dot" style="background:var(--text-muted);box-shadow:none"></span>
+        <span id="user-name">Not signed in</span>
       </div>
       <button class="top-signout" id="sign-out-btn" type="button">Sign Out</button>
     </div>
@@ -278,7 +278,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 /* ═══════════════════════════════════════════════════
    STATE
 ═══════════════════════════════════════════════════ */
-const LOGIN_URL = 'https://login.lvo-cloud.cloud/';
+const LOGIN_URL = 'https://login.lvo-cloud.cloud/'; // Clerk-based, retired — not used by the boot script below
 const STORAGE_KEY = 'lvo_status_pins_v2';
 
 let _pins = [];
@@ -316,13 +316,20 @@ function genId() { return Date.now().toString(36) + Math.random().toString(36).s
 
 /* ═══════════════════════════════════════════════════
    WORKER FETCH — same pattern as the division dashboards.
-   Session token is attached automatically by LVOAuth._request;
-   admin checks happen server-side, not on anything sent from here.
+   NOTE: with auth disabled below, LVOAuth may be undefined or
+   tokenless. This only gets called from the Control tab
+   (fetchSystemStatus/toggleSystem/saveSystemMessage) — those
+   calls will fail until a real auth/session system is wired
+   back in. Pins/Add/Status tabs don't depend on this at all.
 ═══════════════════════════════════════════════════ */
 function workerFetch(path, opts = {}) {
-  return LVOAuth._request(path, opts)
-    .then(data => ({ ok: true, json: async () => data }))
-    .catch(e => ({ ok: false, status: e.status || 500, json: async () => e.data || { error: e.message }, text: async () => e.message }));
+  try {
+    return LVOAuth._request(path, opts)
+      .then(data => ({ ok: true, json: async () => data }))
+      .catch(e => ({ ok: false, status: e.status || 500, json: async () => e.data || { error: e.message }, text: async () => e.message }));
+  } catch (e) {
+    return Promise.resolve({ ok: false, status: 0, json: async () => ({ error: 'No auth client available yet.' }), text: async () => e.message });
+  }
 }
 
 /* ═══════════════════════════════════════════════════
@@ -775,7 +782,7 @@ async function fetchSystemStatus() {
     _systemStatus = await res.json();
   } catch (e) {
     console.error('system-status fetch failed', e);
-    if (el) el.innerHTML = `<div class="pin-empty" style="color:var(--red-light)">Failed to load system status</div>`;
+    if (el) el.innerHTML = `<div class="pin-empty" style="color:var(--red-light)">System control needs auth wired back in — not available yet</div>`;
     return;
   }
   renderControlList();
@@ -1016,50 +1023,27 @@ function showToast(msg) {
 }
 
 /* ═══════════════════════════════════════════════════
-   AUTH — worker session, same as the division dashboards.
-   This page requires an admin-role account: anyone signed in
-   but not an admin is bounced, same as a signed-out visitor.
+   BOOT — auth intentionally bypassed for now.
+
+   The old guard here redirected to login.lvo-cloud.cloud, which
+   was a Clerk-based login page. Clerk is retired and there's no
+   replacement login system yet, so that redirect just dead-ended
+   before the globe ever rendered. This skips straight to showing
+   the app.
+
+   TODO when a real login system exists for this page:
+   - Restore a guard here (token check → session check → role
+     check), same shape as the Command Center's per-division
+     login, pointed at whatever replaces login.lvo-cloud.cloud.
+   - Until then, the "Control" tab's system-status calls will
+     fail (they go through LVOAuth._request), and "Sign Out"
+     is a no-op — both expected with no auth wired in.
 ═══════════════════════════════════════════════════ */
-window.addEventListener('load', async () => {
-  const token = LVOAuth.getToken();
-  if (!token) {
-    document.getElementById('auth-guard-text').textContent = 'Redirecting…';
-    setTimeout(() => window.location.href = LOGIN_URL, 400);
-    return;
-  }
-
-  document.getElementById('auth-guard-text').textContent = 'Authenticating…';
-  let user = null;
-  try { user = await LVOAuth.session(); } catch (e) { user = null; }
-
-  if (!user) {
-    document.getElementById('auth-guard-text').textContent = 'Session expired. Redirecting…';
-    LVOAuth.clearToken();
-    setTimeout(() => window.location.href = LOGIN_URL, 800);
-    return;
-  }
-
-  if (user.role !== 'admin') {
-    document.getElementById('auth-guard-text').textContent = 'Restricted — administrator access only. Redirecting…';
-    setTimeout(() => window.location.href = LOGIN_URL, 1200);
-    return;
-  }
-
-  _U = user;
-  const displayName = user.firstName
-    ? user.firstName + (user.lastName ? ' ' + user.lastName[0] + '.' : '')
-    : (user.email || 'Admin');
-
-  document.getElementById('user-name').textContent = displayName;
-  document.getElementById('auth-guard').style.display = 'none';
-  document.getElementById('app').classList.add('visible');
-
-  document.getElementById('sign-out-btn').addEventListener('click', async () => {
-    await LVOAuth.logout();
-    window.location.href = LOGIN_URL;
+window.addEventListener('load', () => {
+  document.getElementById('sign-out-btn').addEventListener('click', () => {
+    showToast('No login system wired in yet');
   });
 
-  // Init
   loadPins();
   initGlobe();
 
