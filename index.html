@@ -1040,6 +1040,8 @@ function showToast(msg) {
      is a no-op — both expected with no auth wired in.
 ═══════════════════════════════════════════════════ */
 window.addEventListener('load', () => {
+  document.getElementById('app').classList.add('visible');
+
   document.getElementById('sign-out-btn').addEventListener('click', () => {
     showToast('No login system wired in yet');
   });
