@@ -39,11 +39,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 
-/* AUTH GUARD */
-#auth-guard{position:fixed;inset:0;background:var(--black);display:flex;align-items:center;justify-content:center;z-index:9000;flex-direction:column;gap:16px}
-#auth-guard-text{font-size:9px;letter-spacing:.3em;color:var(--text-muted);text-transform:uppercase}
-.auth-logo{height:40px;width:auto;margin-bottom:4px;object-fit:contain}
-
 #app{display:none;height:100vh;overflow:hidden;flex-direction:column}
 #app.visible{display:flex;animation:fadeIn .6s ease}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -187,15 +182,69 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .modal-close{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:17px;padding:0;line-height:1;transition:color .2s}
 .modal-close:hover{color:var(--text)}
 .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+
+/* AUTH SCREENS */
+#login-screen,#denied-screen{position:fixed;inset:0;background:var(--black);z-index:8000;display:none;align-items:center;justify-content:center}
+#login-screen.visible,#denied-screen.visible{display:flex}
+.login-card{background:var(--surface);border:1px solid var(--border-gold);padding:36px 32px;width:340px;max-width:90vw;display:flex;flex-direction:column;animation:modalIn .2s ease}
+.login-logo{height:32px;width:auto;object-fit:contain;margin:0 auto 14px;display:block}
+.login-title{font-family:'Cormorant Garamond',serif;font-size:21px;font-weight:400;color:var(--text);text-align:center;letter-spacing:.03em;margin-bottom:4px}
+.login-tagline{font-size:8px;letter-spacing:.24em;color:var(--gold);text-transform:uppercase;text-align:center;margin-bottom:22px}
+.subhead{font-size:10px;color:var(--text-dim);line-height:1.6;margin-bottom:14px}
+.error-text{font-size:10px;color:var(--red-light);min-height:14px;letter-spacing:.02em;margin-top:2px}
+.denied-card{background:var(--surface);border:1px solid rgba(192,57,43,.5);padding:40px 34px;width:380px;max-width:90vw;text-align:center}
+.denied-title{font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--red-light);margin-bottom:12px;letter-spacing:.03em}
+.denied-text{font-size:11px;color:var(--text-dim);line-height:1.7;margin-bottom:20px}
+.denied-text strong{color:var(--text)}
 </style>
 </head>
 <body>
 
-<!-- Auth Guard (currently unused — see boot script below) -->
-<div id="auth-guard" style="display:none">
-  <img class="auth-logo" src="assets/logo.png" alt="LVO">
-  <div id="auth-guard-text">Verifying access…</div>
+<!-- Login — same LVOAuth-backed username/password flow as the chat room ("secure line") -->
+<section id="login-screen">
+  <form class="login-card" id="login-form">
+    <img class="login-logo" src="assets/logo.png" alt="LVO">
+    <div class="login-title">Global Operations Status</div>
+    <div class="login-tagline">Admin sign-in required</div>
+    <div class="form-group">
+      <label class="form-label">Username</label>
+      <input class="form-input" id="login-username" type="text" autocomplete="username" required>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input class="form-input" id="login-password" type="password" autocomplete="current-password" required>
+    </div>
+    <button class="btn btn-gold" type="submit" id="login-submit" style="width:100%;margin-top:6px">Sign In</button>
+    <p class="error-text" id="login-error"></p>
+  </form>
+</section>
+
+<!-- Force password change (first login with a temporary password — same as the chat room) -->
+<div class="modal-overlay" id="pwd-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Set a New Password</div>
+    </div>
+    <p class="subhead">Your admin created this account with a temporary password. Choose your own before continuing.</p>
+    <div class="form-group">
+      <label class="form-label">New Password (8+ characters)</label>
+      <input class="form-input" id="pwd-new" type="password" autocomplete="new-password">
+    </div>
+    <p class="error-text" id="pwd-error"></p>
+    <div class="modal-footer">
+      <button class="btn btn-gold btn-sm" id="pwd-save">Save &amp; Continue</button>
+    </div>
+  </div>
 </div>
+
+<!-- Shown to any signed-in user who isn't tagged admin -->
+<section id="denied-screen">
+  <div class="denied-card">
+    <div class="denied-title">Access Restricted</div>
+    <div class="denied-text">This status board is limited to LVO admins. The account <strong id="denied-username"></strong> doesn't have admin access.</div>
+    <button class="btn btn-outline btn-sm" id="denied-signout">Sign Out</button>
+  </div>
+</section>
 
 <!-- App -->
 <div id="app">
@@ -279,7 +328,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 /* ═══════════════════════════════════════════════════
    STATE
 ═══════════════════════════════════════════════════ */
-const LOGIN_URL = 'https://login.lvo-cloud.cloud/'; // Clerk-based, retired — not used by the boot script below
 const STORAGE_KEY = 'lvo_status_pins_v2';
 const INCIDENTS_KEY = 'lvo_status_incidents_v1';
 const OPERATOR_KEY = 'lvo_status_operator_name';
@@ -411,12 +459,140 @@ function exportIncidentsCSV() {
 }
 
 /* ═══════════════════════════════════════════════════
+   AUTH — this reuses the same LVOAuth client the chat room
+   ("secure line") signs in with, loaded from assets/auth-client.js.
+   That's the same script workerFetch() below already calls into.
+
+   This assumes the client exposes:
+     LVOAuth.isAuthenticated()           -> bool
+     LVOAuth.getCurrentUser()            -> {username, displayName, isAdmin, mustChangePassword, ...} | null
+     LVOAuth.login(username, password)   -> Promise<{user, mustChangePassword}>, rejects with {message} on bad creds
+     LVOAuth.changePassword(newPassword) -> Promise<void>
+     LVOAuth.logout()                    -> void
+   If your actual auth-client.js names these differently, only the
+   calls in this block need to change — nothing else in the file
+   depends on the exact shape.
+
+   Only accounts flagged admin get past this gate. Everyone else
+   (a valid login, just not an admin) lands on the Access Restricted
+   screen instead of the dashboard.
+═══════════════════════════════════════════════════ */
+function isAdminUser(user) {
+  if (!user) return false;
+  // Checks a few common shapes so this works whether the client
+  // exposes isAdmin, is_admin, admin, a role string, or a tags/roles array.
+  return !!(user.isAdmin || user.is_admin || user.admin ||
+    user.role === 'admin' ||
+    (Array.isArray(user.roles) && user.roles.includes('admin')) ||
+    (Array.isArray(user.tags) && user.tags.includes('admin')));
+}
+
+function showScreen(id) {
+  ['login-screen', 'denied-screen'].forEach(s => document.getElementById(s).classList.remove('visible'));
+  document.getElementById('app').classList.remove('visible');
+  if (id === 'app') document.getElementById('app').classList.add('visible');
+  else document.getElementById(id).classList.add('visible');
+}
+
+function boot() {
+  let user = null;
+  try {
+    user = (typeof LVOAuth !== 'undefined' && LVOAuth.isAuthenticated && LVOAuth.isAuthenticated())
+      ? LVOAuth.getCurrentUser()
+      : null;
+  } catch (e) { user = null; }
+
+  if (!user) { showScreen('login-screen'); return; }
+  if (user.mustChangePassword) { showScreen('login-screen'); openPwdModal(); return; }
+  gateOnAdmin(user);
+}
+
+function gateOnAdmin(user) {
+  if (isAdminUser(user)) {
+    document.getElementById('user-name').textContent = user.displayName || user.username || 'Signed in';
+    const dot = document.querySelector('.auth-dot');
+    if (dot) { dot.style.background = 'var(--green)'; dot.style.boxShadow = '0 0 6px #2d6a4a'; }
+    showScreen('app');
+    startApp();
+  } else {
+    document.getElementById('denied-username').textContent = user.username || user.displayName || 'this account';
+    showScreen('denied-screen');
+  }
+}
+
+function startApp() {
+  loadPins();
+  loadIncidents();
+  if (!window._globeStarted) {
+    window._globeStarted = true;
+    initGlobe();
+    cancelAnimationFrame(globeAnimFrame);
+    animateGlobeWithPulse();
+  } else {
+    renderPins();
+  }
+  switchPanel('pins', document.querySelector('.ptab'));
+}
+
+function openPwdModal() {
+  document.getElementById('pwd-new').value = '';
+  document.getElementById('pwd-error').textContent = '';
+  document.getElementById('pwd-modal').classList.add('open');
+}
+function closePwdModal() {
+  document.getElementById('pwd-modal').classList.remove('open');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+    const btn = document.getElementById('login-submit');
+    errEl.textContent = '';
+    btn.disabled = true;
+    try {
+      const result = await LVOAuth.login(username, password);
+      const user = (result && result.user) || (LVOAuth.getCurrentUser && LVOAuth.getCurrentUser());
+      if ((result && result.mustChangePassword) || (user && user.mustChangePassword)) {
+        openPwdModal();
+      } else {
+        gateOnAdmin(user);
+      }
+    } catch (err) {
+      errEl.textContent = (err && err.message) || 'Invalid username or password.';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('pwd-save').addEventListener('click', async () => {
+    const val = document.getElementById('pwd-new').value;
+    const errEl = document.getElementById('pwd-error');
+    if (!val || val.length < 8) { errEl.textContent = 'Use at least 8 characters.'; return; }
+    try {
+      await LVOAuth.changePassword(val);
+      closePwdModal();
+      const user = LVOAuth.getCurrentUser && LVOAuth.getCurrentUser();
+      gateOnAdmin(user);
+    } catch (err) {
+      errEl.textContent = (err && err.message) || 'Could not set password — try again.';
+    }
+  });
+
+  document.getElementById('denied-signout').addEventListener('click', () => {
+    try { LVOAuth.logout && LVOAuth.logout(); } catch(e) {}
+    showScreen('login-screen');
+  });
+});
+
+/* ═══════════════════════════════════════════════════
    WORKER FETCH — same pattern as the division dashboards.
-   NOTE: with auth disabled below, LVOAuth may be undefined or
-   tokenless. This only gets called from the Control tab
-   (fetchSystemStatus/toggleSystem/saveSystemMessage) — those
-   calls will fail until a real auth/session system is wired
-   back in. Pins/Add/Status tabs don't depend on this at all.
+   Now that a real session exists post-login, LVOAuth._request
+   carries the session token, so Control tab calls
+   (fetchSystemStatus/toggleSystem/saveSystemMessage) work the
+   same way they do on the division dashboards.
 ═══════════════════════════════════════════════════ */
 function workerFetch(path, opts = {}) {
   try {
@@ -1203,39 +1379,20 @@ function showToast(msg) {
 }
 
 /* ═══════════════════════════════════════════════════
-   BOOT — auth intentionally bypassed for now.
-
-   The old guard here redirected to login.lvo-cloud.cloud, which
-   was a Clerk-based login page. Clerk is retired and there's no
-   replacement login system yet, so that redirect just dead-ended
-   before the globe ever rendered. This skips straight to showing
-   the app.
-
-   TODO when a real login system exists for this page:
-   - Restore a guard here (token check → session check → role
-     check), same shape as the Command Center's per-division
-     login, pointed at whatever replaces login.lvo-cloud.cloud.
-   - Until then, the "Control" tab's system-status calls will
-     fail (they go through LVOAuth._request), and "Sign Out"
-     is a no-op — both expected with no auth wired in.
+   BOOT — gates the dashboard behind the same LVOAuth login
+   the chat room uses, and behind an admin check on top of
+   that (see the AUTH block above for both).
 ═══════════════════════════════════════════════════ */
 window.addEventListener('load', () => {
-  document.getElementById('app').classList.add('visible');
-
   document.getElementById('sign-out-btn').addEventListener('click', () => {
-    showToast('No login system wired in yet');
+    try { LVOAuth.logout && LVOAuth.logout(); } catch(e) {}
+    document.getElementById('user-name').textContent = 'Not signed in';
+    const dot = document.querySelector('.auth-dot');
+    if (dot) { dot.style.background = 'var(--text-muted)'; dot.style.boxShadow = 'none'; }
+    showScreen('login-screen');
   });
 
-  loadPins();
-  loadIncidents();
-  initGlobe();
-
-  // Patch animate to include pulse
-  cancelAnimationFrame(globeAnimFrame);
-  animateGlobeWithPulse();
-
-  // Initial panel
-  switchPanel('pins', document.querySelector('.ptab'));
+  boot();
 });
 </script>
 </body>
